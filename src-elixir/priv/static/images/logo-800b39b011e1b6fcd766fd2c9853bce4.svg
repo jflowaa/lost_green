@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" aria-hidden="true">
+  <defs>
+    <linearGradient id="bike-potato-frame" x1="44" y1="190" x2="210" y2="72" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#84CC16" />
+      <stop offset="1" stop-color="#F97316" />
+    </linearGradient>
+  </defs>
+
+  <circle cx="68" cy="178" r="34" stroke="#1F2937" stroke-width="16" />
+  <circle cx="188" cy="178" r="34" stroke="#1F2937" stroke-width="16" />
+
+  <path
+    d="M68 178 102 114h44l42 64M120 178l26-64M94 178h94M111 96h46"
+    stroke="url(#bike-potato-frame)"
+    stroke-width="16"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+
+  <path
+    d="M103 114 84 93M156 96h28l15-22"
+    stroke="#1F2937"
+    stroke-width="14"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+
+  <path
+    d="M72 83h30"
+    stroke="#1F2937"
+    stroke-width="12"
+    stroke-linecap="round"
+  />
+
+  <circle cx="128" cy="128" r="10" fill="#1F2937" />
+  <circle cx="128" cy="128" r="5" fill="#FFF7ED" />
+</svg>

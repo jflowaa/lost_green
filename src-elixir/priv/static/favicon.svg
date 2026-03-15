@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none">
+  <defs>
+    <linearGradient id="bike-potato-bg" x1="32" y1="224" x2="224" y2="32" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#65A30D" />
+      <stop offset="1" stop-color="#EA580C" />
+    </linearGradient>
+    <linearGradient id="bike-potato-mark" x1="66" y1="180" x2="190" y2="92" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#D9F99D" />
+      <stop offset="1" stop-color="#FFEDD5" />
+    </linearGradient>
+  </defs>
+
+  <rect x="20" y="20" width="216" height="216" rx="56" fill="url(#bike-potato-bg)" />
+
+  <circle cx="74" cy="176" r="28" stroke="#111827" stroke-width="14" />
+  <circle cx="182" cy="176" r="28" stroke="#111827" stroke-width="14" />
+
+  <path
+    d="M74 176 104 120h40l38 56M120 176l24-56M96 176h86M110 104h40"
+    stroke="url(#bike-potato-mark)"
+    stroke-width="14"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+
+  <path
+    d="M104 120 88 102M150 104h24l14-20M76 92h24"
+    stroke="#111827"
+    stroke-width="11"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+
+  <circle cx="128" cy="120" r="8" fill="#111827" />
+</svg>

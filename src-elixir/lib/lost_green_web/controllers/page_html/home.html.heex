@@ -1,0 +1,190 @@
+<Layouts.flash_group flash={@flash} />
+
+<% imperial? = @form[:measurement_units].value == "imperial" %>
+<% height_unit = if imperial?, do: "in", else: "cm" %>
+<% weight_unit = if imperial?, do: "lb", else: "kg" %>
+<% height_placeholder = if imperial?, do: "e.g. 70", else: "e.g. 178" %>
+<% weight_placeholder = if imperial?, do: "e.g. 160", else: "e.g. 73" %>
+
+<div class="min-h-screen bg-base-100 text-base-content flex">
+  <main class="mx-auto my-auto w-full max-w-4xl px-4 py-10 sm:px-6">
+    <%!-- Profile selector --%>
+    <%= if @users != [] do %>
+      <section class="mb-10">
+        <h2 class="mb-1 text-xl font-semibold">Who's riding today?</h2>
+        <p class="mb-6 text-sm text-base-content/60">
+          Select your profile to jump to the dashboard.
+        </p>
+
+        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <%= for user <- @users do %>
+            <.form for={%{}} action={~p"/users/select"} method="post">
+              <input type="hidden" name="user_id" value={user.id} />
+              <button
+                type="submit"
+                class="card w-full border border-base-300 bg-base-100 text-left transition hover:-translate-y-0.5 hover:border-primary/40 hover:bg-base-200/60 cursor-pointer"
+              >
+                <div class="card-body p-5 gap-2">
+                  <div class="flex items-center justify-between">
+                    <div class="flex size-10 items-center justify-center rounded-full bg-primary/15 text-primary font-bold text-lg">
+                      {String.first(user.handle) |> String.upcase()}
+                    </div>
+                    <.icon name="hero-arrow-right" class="size-4 text-base-content/40" />
+                  </div>
+                  <p class="font-semibold text-base">{user.handle}</p>
+                  <%= if user.measurement_units do %>
+                    <p class="text-xs text-base-content/50 capitalize">
+                      {user.measurement_units}
+                    </p>
+                  <% end %>
+                </div>
+              </button>
+            </.form>
+          <% end %>
+        </div>
+      </section>
+
+      <div class="divider">or create a new profile</div>
+    <% end %>
+
+    <%!-- Create profile form --%>
+    <section class={if @users == [], do: "", else: "mt-6"}>
+      <.form
+        for={@form}
+        action={~p"/users"}
+        method="post"
+        class="card border border-base-300 bg-base-100 max-w-lg mx-auto"
+      >
+        <div class="card-body gap-5 p-6">
+          <%= if @users == [] do %>
+            <div>
+              <h2 class="text-xl font-semibold">Create your first profile</h2>
+              <p class="mt-1 text-sm text-base-content/60">
+                Everything is stored locally — no account or email needed. Your data stays on your machine.
+              </p>
+            </div>
+          <% else %>
+            <h2 class="text-lg font-semibold">New Profile</h2>
+          <% end %>
+
+          <%!-- Handle --%>
+          <div class="form-control gap-1">
+            <label class="label pb-1" for="user_handle">
+              <span class="label-text font-medium">Handle <span class="text-error">*</span></span>
+            </label>
+            <.input
+              field={@form[:handle]}
+              type="text"
+              placeholder="e.g. Jack"
+              class="input input-bordered w-full"
+            />
+          </div>
+
+          <%!-- Gender --%>
+          <div class="form-control gap-2">
+            <span class="label-text font-medium">Gender <span class="text-error">*</span></span>
+            <div class="flex gap-6">
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name={@form[:gender].name}
+                  value="male"
+                  checked={@form[:gender].value == "male"}
+                  class="radio radio-primary"
+                />
+                <span class="label-text">Male</span>
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name={@form[:gender].name}
+                  value="female"
+                  checked={@form[:gender].value == "female"}
+                  class="radio radio-primary"
+                />
+                <span class="label-text">Female</span>
+              </label>
+            </div>
+          </div>
+
+          <%!-- Measurement units --%>
+          <div class="form-control gap-2">
+            <span class="label-text font-medium">Units <span class="text-error">*</span></span>
+            <div class="flex gap-6">
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name={@form[:measurement_units].name}
+                  value="imperial"
+                  checked={@form[:measurement_units].value == "imperial"}
+                  class="radio radio-primary"
+                />
+                <span class="label-text">Imperial (in / lbs)</span>
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name={@form[:measurement_units].name}
+                  value="metric"
+                  checked={@form[:measurement_units].value in [nil, "", "metric"]}
+                  class="radio radio-primary"
+                />
+                <span class="label-text">Metric (cm / kg)</span>
+              </label>
+            </div>
+          </div>
+
+          <%!-- Birthdate --%>
+          <div class="form-control gap-1">
+            <label class="label pb-1" for="user_birthdate">
+              <span class="label-text font-medium">
+                Birthdate <span class="text-error">*</span>
+              </span>
+            </label>
+            <.input field={@form[:birthdate]} type="date" class="input input-bordered w-full" />
+          </div>
+
+          <%!-- Height + Weight side by side --%>
+          <div class="grid grid-cols-2 gap-4">
+            <div class="form-control gap-1">
+              <label class="label pb-1" for="user_height">
+                <span class="label-text font-medium">
+                  Height ({height_unit}) <span class="text-error">*</span>
+                </span>
+              </label>
+              <.input
+                field={@form[:height]}
+                type="number"
+                min="0.1"
+                step="any"
+                placeholder={height_placeholder}
+                class="input input-bordered w-full"
+              />
+            </div>
+            <div class="form-control gap-1">
+              <label class="label pb-1" for="user_weight">
+                <span class="label-text font-medium">
+                  Weight ({weight_unit}) <span class="text-error">*</span>
+                </span>
+              </label>
+              <.input
+                field={@form[:weight]}
+                type="number"
+                min="0.1"
+                step="any"
+                placeholder={weight_placeholder}
+                class="input input-bordered w-full"
+              />
+            </div>
+          </div>
+
+          <div class="card-actions pt-2">
+            <button type="submit" class="btn btn-primary w-full">
+              Create Profile
+            </button>
+          </div>
+        </div>
+      </.form>
+    </section>
+  </main>
+</div>

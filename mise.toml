@@ -1,0 +1,5 @@
+[tools]
+elixir = "latest"
+erlang = "latest"
+rust = "latest"
+zig = "latest"
