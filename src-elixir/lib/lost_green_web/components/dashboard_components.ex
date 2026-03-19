@@ -96,9 +96,9 @@ defmodule LostGreenWeb.DashboardComponents do
             for={@trainer_resistance_factor_form}
             id="trainer-resistance-factor-form"
             phx-submit="set_trainer_resistance_factor"
-            class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"
+            class="mt-4 flex gap-3 flex-col"
           >
-            <div class="flex-1">
+            <div class="w-full sm:w-1/2 lg:w-1/4">
               <.input
                 field={@trainer_resistance_factor_form[:value]}
                 type="number"
@@ -109,10 +109,7 @@ defmodule LostGreenWeb.DashboardComponents do
               />
             </div>
 
-            <div class="flex items-center justify-between gap-3 sm:justify-end">
-              <p class="text-xs text-base-content/55">
-                Applies only after the trainer acknowledges the command.
-              </p>
+            <div>
               <button type="submit" class="btn btn-primary btn-sm rounded-xl">
                 Apply Resistance Factor
               </button>
@@ -124,7 +121,7 @@ defmodule LostGreenWeb.DashboardComponents do
     """
   end
 
-  attr(:device_defs, :list, required: true)
+  attr(:device_definitions, :list, required: true)
   attr(:metrics, :map, required: true)
   attr(:current_user, :map, required: true)
 
@@ -146,8 +143,8 @@ defmodule LostGreenWeb.DashboardComponents do
       </div>
       <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <.device_tray_tile
-          :for={d <- @device_defs}
-          device_def={d}
+          :for={d <- @device_definitions}
+          device_definition={d}
           current_user={@current_user}
           connected={Map.get(@metrics.devices, d.atom)}
           smart_trainer={Map.get(@metrics.devices, :smart_trainer)}
@@ -272,7 +269,7 @@ defmodule LostGreenWeb.DashboardComponents do
   end
 
   attr(:modal_step, :atom, required: true)
-  attr(:device_defs, :list, required: true)
+  attr(:device_definitions, :list, required: true)
   attr(:modal_device_type, :string, default: nil)
   attr(:modal_available_devices, :list, required: true)
   attr(:modal_scanning?, :boolean, required: true)
@@ -298,7 +295,7 @@ defmodule LostGreenWeb.DashboardComponents do
                 </h3>
               <% true -> %>
                 <h3 class="mt-1 text-xl font-semibold tracking-tight">
-                  {label_for_type(@device_defs, @modal_device_type)}
+                  {label_for_type(@device_definitions, @modal_device_type)}
                 </h3>
             <% end %>
           </div>
@@ -317,7 +314,7 @@ defmodule LostGreenWeb.DashboardComponents do
           <% @modal_step == :pick_type -> %>
             <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
               <button
-                :for={d <- @device_defs}
+                :for={d <- @device_definitions}
                 id={"modal-type-#{d.key}"}
                 type="button"
                 phx-click="pick_device_type"
@@ -398,7 +395,7 @@ defmodule LostGreenWeb.DashboardComponents do
     """
   end
 
-  attr(:device_def, :map, required: true)
+  attr(:device_definition, :list, required: true)
   attr(:current_user, :map, required: true)
   attr(:connected, :map, default: nil)
   attr(:smart_trainer, :map, default: nil)
@@ -407,12 +404,12 @@ defmodule LostGreenWeb.DashboardComponents do
   def device_tray_tile(assigns) do
     ~H"""
     <div
-      id={"device-tray-#{@device_def.key}"}
+      id={"device-tray-#{@device_definition.key}"}
       class="rounded-2xl border border-base-300 bg-base-100 p-4 shadow-sm"
     >
       <div class="flex items-start justify-between">
         <div class="flex size-9 items-center justify-center rounded-xl bg-primary/10">
-          <.icon name={@device_def.icon} class="size-4 text-primary" />
+          <.icon name={@device_definition.icon} class="size-4 text-primary" />
         </div>
         <span class={[
           "badge px-2 py-1 text-xs",
@@ -424,20 +421,20 @@ defmodule LostGreenWeb.DashboardComponents do
 
       <div class="mt-3">
         <p class="text-xs uppercase tracking-[0.22em] text-base-content/50">
-          {@device_def.label}
+          {@device_definition.label}
         </p>
         <div class="mt-1 flex items-end gap-1">
           <span class="text-2xl font-semibold">
-            {format_device_reading(@reading, @device_def, @current_user)}
+            {format_device_reading(@reading, @device_definition, @current_user)}
           </span>
           <span class="pb-0.5 text-xs text-base-content/40">
-            {display_device_unit(@device_def, @current_user)}
+            {display_device_unit(@device_definition, @current_user)}
           </span>
         </div>
         <%= if @connected do %>
           <p class="mt-1 truncate text-xs text-base-content/50">{@connected.name}</p>
 
-          <%= if sourced_from_trainer?(@device_def, @connected, @smart_trainer) do %>
+          <%= if sourced_from_trainer?(@device_definition, @connected, @smart_trainer) do %>
             <span class="badge badge-info mt-2 px-2 py-1 text-[10px] uppercase tracking-[0.12em]">
               Trainer Source
             </span>
@@ -450,11 +447,11 @@ defmodule LostGreenWeb.DashboardComponents do
       <%= if @connected && @connected.id do %>
         <div class="mt-4 flex items-center gap-2">
           <button
-            id={"device-disconnect-#{@device_def.key}"}
+            id={"device-disconnect-#{@device_definition.key}"}
             type="button"
             phx-click="device_bridge_action"
             phx-value-action="disconnect"
-            phx-value-device_type={@device_def.key}
+            phx-value-device_type={@device_definition.key}
             phx-value-device_id={@connected.id}
             class="btn btn-ghost btn-xs w-full rounded-lg"
           >
@@ -472,8 +469,8 @@ defmodule LostGreenWeb.DashboardComponents do
     """
   end
 
-  defp label_for_type(device_defs, type) do
-    case Enum.find(device_defs, &(&1.key == type)) do
+  defp label_for_type(device_definitions, type) do
+    case Enum.find(device_definitions, &(&1.key == type)) do
       nil -> "Select device"
       d -> d.label
     end

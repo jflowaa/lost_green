@@ -7,7 +7,7 @@ defmodule LostGreenWeb.DashboardLive do
   @chart_width 320
   @chart_height 120
 
-  @device_defs [
+  @device_definitions [
     %{
       key: "smart_trainer",
       atom: :smart_trainer,
@@ -57,15 +57,15 @@ defmodule LostGreenWeb.DashboardLive do
 
   def mount(_params, _session, socket) do
     app_name = Application.get_env(:lost_green, :application_name, "Lost Green")
-    Metrics.set_user_profile(socket.assigns.current_user)
-    Metrics.set_trainer_profile(socket.assigns.current_user)
+    Metrics.set_user_profile_on_heart_rate(socket.assigns.current_user)
+    Metrics.set_user_profile_on_smart_trainer(socket.assigns.current_user)
     metrics = Metrics.snapshot()
-    trainer_physics = Metrics.trainer_physics()
+    trainer_physics = Metrics.get_trainer_physics()
 
     {:ok,
      socket
      |> assign(:page_title, "Dashboard · #{app_name}")
-     |> assign(:device_defs, @device_defs)
+     |> assign(:device_definitions, @device_definitions)
      |> assign(:device_modal_open?, false)
      |> assign(:modal_step, :pick_type)
      |> assign(:modal_device_type, nil)
@@ -194,7 +194,7 @@ defmodule LostGreenWeb.DashboardLive do
   end
 
   def handle_event("device_connected", %{"device_type" => type, "device" => device}, socket) do
-    case find_device_def(type) do
+    case find_device_definition(type) do
       nil ->
         {:noreply, socket}
 
@@ -211,7 +211,7 @@ defmodule LostGreenWeb.DashboardLive do
   end
 
   def handle_event("device_disconnected", %{"device_type" => type}, socket) do
-    case find_device_def(type) do
+    case find_device_definition(type) do
       nil ->
         {:noreply, socket}
 
@@ -222,24 +222,20 @@ defmodule LostGreenWeb.DashboardLive do
   end
 
   def handle_event("device_reading", %{"device_type" => type} = params, socket) do
-    case find_device_def(type) do
+    case find_device_definition(type) do
       nil ->
         {:noreply, socket}
 
       d ->
-        if should_record_reading?(socket.assigns.metrics.devices, d.atom, params) do
-          snapshot =
-            if d.atom == :smart_trainer do
-              Metrics.record_smart_trainer_reading(params)
-            else
-              value = Map.get(params, d.value_field)
-              Metrics.record_metric(d.atom, d.metric, value, %{at: params["at"]})
-            end
+        snapshot =
+          if d.atom == :smart_trainer do
+            Metrics.record_smart_trainer_reading(params)
+          else
+            value = Map.get(params, d.value_field)
+            Metrics.record_metric(d.atom, d.metric, value, %{at: params["at"]})
+          end
 
-          {:noreply, assign(socket, :metrics, snapshot)}
-        else
-          {:noreply, socket}
-        end
+        {:noreply, assign(socket, :metrics, snapshot)}
     end
   end
 
@@ -255,7 +251,7 @@ defmodule LostGreenWeb.DashboardLive do
     physics = trainer_physics_params(params, socket.assigns.trainer_physics)
 
     snapshot = Metrics.update_trainer_physics(physics)
-    trainer_physics = Metrics.trainer_physics()
+    trainer_physics = Metrics.get_trainer_physics()
 
     {:noreply,
      socket
@@ -311,7 +307,7 @@ defmodule LostGreenWeb.DashboardLive do
         />
 
         <DashboardComponents.devices_section
-          device_defs={@device_defs}
+          device_definitions={@device_definitions}
           metrics={@metrics}
           current_user={@current_user}
         />
@@ -327,7 +323,7 @@ defmodule LostGreenWeb.DashboardLive do
         <DashboardComponents.device_modal
           :if={@device_modal_open?}
           modal_step={@modal_step}
-          device_defs={@device_defs}
+          device_definitions={@device_definitions}
           modal_device_type={@modal_device_type}
           modal_available_devices={@modal_available_devices}
           modal_scanning?={@modal_scanning?}
@@ -340,33 +336,17 @@ defmodule LostGreenWeb.DashboardLive do
 
   # ── Private helpers ──────────────────────────────────────────────────────────
 
-  defp find_device_def(type) when is_binary(type) do
-    Enum.find(@device_defs, &(&1.key == type))
+  defp find_device_definition(type) when is_binary(type) do
+    Enum.find(@device_definitions, &(&1.key == type))
   end
 
   defp normalize_devices(devices) when is_list(devices) do
     Enum.map(devices, fn device ->
-      %{
-        id: Map.get(device, "id") || Map.get(device, :id),
-        name: Map.get(device, "name") || Map.get(device, :name) || "Unknown Device"
-      }
+      LostGreen.DataHelper.normalize_device(device)
     end)
   end
 
   defp normalize_devices(_), do: []
-
-  defp should_record_reading?(devices, device_atom, params) do
-    case Map.get(devices, device_atom) do
-      %{id: connected_id} when is_binary(connected_id) and connected_id != "" ->
-        case reading_source_id(params) do
-          nil -> true
-          source_id -> source_id == connected_id
-        end
-
-      _ ->
-        false
-    end
-  end
 
   defp parse_float_param(nil, default), do: default
   defp parse_float_param(value, _default) when is_float(value), do: value
@@ -440,14 +420,6 @@ defmodule LostGreenWeb.DashboardLive do
       rolling_resistance:
         parse_float_param(params["rolling_resistance"], current_physics.rolling_resistance)
     }
-  end
-
-  defp reading_source_id(params) do
-    source = Map.get(params, "source_id") || Map.get(params, "device_id")
-
-    if is_binary(source) and source != "" do
-      source
-    end
   end
 
   defp connected_devices_payload(devices) do

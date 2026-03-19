@@ -47,7 +47,11 @@ defmodule LostGreen.Metrics.DeviceServer do
 
   def handle_call({:record_metric, metric, value, metadata}, _from, state) do
     metric = normalize_metric(metric, state.tracked_metrics)
-    point = %{at: normalize_timestamp(metadata), value: normalize_value(value)}
+
+    point = %{
+      at: LostGreen.DataHelper.normalize_timestamp(metadata),
+      value: normalize_value(value)
+    }
 
     state =
       state
@@ -65,7 +69,7 @@ defmodule LostGreen.Metrics.DeviceServer do
   def handle_call({:connect_device, attrs}, _from, state) do
     state =
       state
-      |> Map.put(:connected_device, normalize_device(attrs))
+      |> Map.put(:connected_device, LostGreen.DataHelper.normalize_device(attrs))
       |> Map.put(:last_updated_at, System.system_time(:millisecond))
 
     {:reply, snapshot_from_state(state), state}
@@ -117,18 +121,4 @@ defmodule LostGreen.Metrics.DeviceServer do
   end
 
   defp normalize_value(_value), do: raise(ArgumentError, "metric value must be numeric")
-
-  defp normalize_timestamp(metadata) do
-    metadata
-    |> Map.get("at", Map.get(metadata, :at, System.system_time(:millisecond)))
-    |> normalize_value()
-  end
-
-  defp normalize_device(attrs) do
-    %{
-      id: Map.get(attrs, "id") || Map.get(attrs, :id),
-      name: Map.get(attrs, "name") || Map.get(attrs, :name) || "Unknown Device",
-      connected_at: System.system_time(:millisecond)
-    }
-  end
 end

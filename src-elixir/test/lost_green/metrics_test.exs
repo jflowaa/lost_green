@@ -15,7 +15,8 @@ defmodule LostGreen.MetricsTest do
     assert snapshot.latest.heart_rate == nil
     assert snapshot.devices.heart_rate_monitor == nil
 
-    snapshot = Metrics.connect_device(:heart_rate_monitor, %{id: "hrm-1", name: "Polar H10"})
+    snapshot =
+      Metrics.connect_device(:heart_rate_monitor, %{"id" => "hrm-1", "name" => "Polar H10"})
 
     assert snapshot.devices.heart_rate_monitor.id == "hrm-1"
     assert snapshot.devices.heart_rate_monitor.name == "Polar H10"

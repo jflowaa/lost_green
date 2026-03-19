@@ -30,6 +30,10 @@ defmodule LostGreen.Metrics do
     trainer_distance: nil
   }
 
+  @doc """
+  Get the latest snapshot of all metrics across all devices, along with metadata about connected devices and timestamps,
+  then merge them into a single cohesive snapshot. This is the main entry point for getting all relevant metrics data for the dashboard.
+  """
   def snapshot do
     Enum.each(@device_servers, fn {_type, module} -> ensure_server(module) end)
 
@@ -51,6 +55,9 @@ defmodule LostGreen.Metrics do
     end)
   end
 
+  @doc """
+  Gets the latest snapshot from the specified device server and returns the value of the requested metric.
+  """
   def read_metric(device_type, metric) when is_atom(device_type) do
     snapshot =
       device_type
@@ -60,6 +67,9 @@ defmodule LostGreen.Metrics do
     Map.get(snapshot.latest, metric)
   end
 
+  @doc """
+  Records a new metric value for the specified device type and metric, along with optional metadata.
+  """
   def record_metric(device_type, metric, value, metadata \\ %{}) when is_atom(device_type) do
     pid = ensure_server_for!(device_type)
 
@@ -72,7 +82,7 @@ defmodule LostGreen.Metrics do
             "resistance_factor" => if(metric == :trainer_resistance_factor, do: value),
             "target_watts" => if(metric == :trainer_target_power, do: value),
             "distance_km" => if(metric == :trainer_distance, do: value),
-            "at" => Map.get(metadata, "at", Map.get(metadata, :at))
+            "at" => LostGreen.DataHelper.normalize_timestamp(metadata)
           })
 
         _ ->
@@ -112,13 +122,21 @@ defmodule LostGreen.Metrics do
     merge_snapshot(snapshot(), :smart_trainer, device_snapshot)
   end
 
+  @doc """
+  Update the physics configuration on the smart trainer server, which is used to calculate speed.
+  Properties include things like: rolling coefficient, slope, and drag.
+  """
   def update_trainer_physics(attrs) when is_map(attrs) do
     pid = ensure_server_for!(:smart_trainer)
     _ = SmartTrainerServer.update_physics(pid, attrs)
     snapshot()
   end
 
-  def trainer_physics do
+  @doc """
+  Get the current physics configuration from the smart trainer server, which is used to calculate speed.
+  Properties include things like: rolling coefficient, slope, and drag.
+  """
+  def get_trainer_physics do
     pid = ensure_server_for!(:smart_trainer)
     SmartTrainerServer.physics(pid)
   end
@@ -127,21 +145,31 @@ defmodule LostGreen.Metrics do
   Seed the current rider's profile into the heart rate server so calorie
   calculations have the necessary context (age, weight, gender).
   """
-  def set_user_profile(user) do
+  def set_user_profile_on_heart_rate(user) do
     ensure_server(HeartRateServer)
 
     case Process.whereis(HeartRateServer) do
       nil -> :ok
-      pid -> HeartRateServer.set_user_profile(pid, user)
+      pid -> HeartRateServer.set_user_profile(pid, LostGreen.DataHelper.normalize_profile(user))
     end
   end
 
-  def set_trainer_profile(user) do
+  @doc """
+  Seed the current rider's weight into the smart trainer server so power to speed
+  calculations have the necessary context.
+  """
+  def set_user_profile_on_smart_trainer(user) do
     ensure_server(SmartTrainerServer)
 
     case Process.whereis(SmartTrainerServer) do
-      nil -> :ok
-      pid -> SmartTrainerServer.set_user_weight(pid, user_weight_kg(user))
+      nil ->
+        :ok
+
+      pid ->
+        SmartTrainerServer.set_user_weight(
+          pid,
+          LostGreen.DataHelper.to_weight_kg(user.weight, user.measurement_units)
+        )
     end
   end
 
@@ -220,13 +248,4 @@ defmodule LostGreen.Metrics do
   defp latest_timestamp(nil, timestamp), do: timestamp
   defp latest_timestamp(timestamp, nil), do: timestamp
   defp latest_timestamp(left, right), do: max(left, right)
-
-  defp user_weight_kg(user) do
-    weight = user.weight || 75.0
-
-    case user.measurement_units do
-      "imperial" -> weight * 0.45359237
-      _ -> weight
-    end
-  end
 end

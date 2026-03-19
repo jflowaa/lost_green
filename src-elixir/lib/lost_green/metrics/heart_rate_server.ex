@@ -73,8 +73,8 @@ defmodule LostGreen.Metrics.HeartRateServer do
   end
 
   def handle_call({:record_metric, :heart_rate, value, metadata}, _from, state) do
-    value = normalize_int(value)
-    at = normalize_timestamp(metadata)
+    value = LostGreen.DataHelper.normalize_int(value)
+    at = LostGreen.DataHelper.normalize_timestamp(metadata)
 
     state =
       state
@@ -95,7 +95,7 @@ defmodule LostGreen.Metrics.HeartRateServer do
 
     state =
       state
-      |> Map.put(:connected_device, normalize_device(attrs))
+      |> Map.put(:connected_device, LostGreen.DataHelper.normalize_device(attrs))
       |> Map.put(:total_calories, 0.0)
       |> Map.put(:workout_calories_offset, 0.0)
       |> Map.put(:workout_active?, false)
@@ -120,7 +120,7 @@ defmodule LostGreen.Metrics.HeartRateServer do
   end
 
   def handle_call({:set_user_profile, profile}, _from, state) do
-    {:reply, :ok, Map.put(state, :user_profile, normalize_profile(profile))}
+    {:reply, :ok, Map.put(state, :user_profile, LostGreen.DataHelper.normalize_profile(profile))}
   end
 
   def handle_call(:start_workout, _from, state) do
@@ -226,69 +226,9 @@ defmodule LostGreen.Metrics.HeartRateServer do
     (male + female) / 2.0
   end
 
-  defp normalize_profile(profile) do
-    gender = parse_gender(Map.get(profile, :gender) || Map.get(profile, "gender"))
-    weight = Map.get(profile, :weight) || Map.get(profile, "weight")
-    units = Map.get(profile, :measurement_units) || Map.get(profile, "measurement_units")
-    weight_kg = to_weight_kg(weight, units)
-    birthdate = Map.get(profile, :birthdate) || Map.get(profile, "birthdate")
-    age = age_from_birthdate(birthdate)
-    %{age: age, weight_kg: weight_kg, gender: gender}
-  end
-
-  defp parse_gender("male"), do: :male
-  defp parse_gender("female"), do: :female
-  defp parse_gender(:male), do: :male
-  defp parse_gender(:female), do: :female
-  defp parse_gender(_), do: nil
-
-  defp to_weight_kg(nil, _units), do: nil
-  defp to_weight_kg(weight, "imperial"), do: weight * 0.453592
-  defp to_weight_kg(weight, _), do: weight * 1.0
-
-  defp age_from_birthdate(nil), do: nil
-
-  defp age_from_birthdate(%Date{} = birthdate) do
-    today = Date.utc_today()
-    years = today.year - birthdate.year
-    if {today.month, today.day} < {birthdate.month, birthdate.day}, do: years - 1, else: years
-  end
-
-  defp age_from_birthdate(date_string) when is_binary(date_string) do
-    case Date.from_iso8601(date_string) do
-      {:ok, date} -> age_from_birthdate(date)
-      _ -> nil
-    end
-  end
-
-  defp age_from_birthdate(_), do: nil
-
   defp update_series(state, metric, point) do
     update_in(state, [:series, metric], fn series ->
       (series ++ [point]) |> Enum.take(-@max_points)
     end)
-  end
-
-  defp normalize_int(value) when is_integer(value), do: value
-  defp normalize_int(value) when is_float(value), do: round(value)
-
-  defp normalize_int(value) when is_binary(value) do
-    case Integer.parse(value) do
-      {parsed, _} -> parsed
-      :error -> raise ArgumentError, "heart rate must be numeric"
-    end
-  end
-
-  defp normalize_timestamp(metadata) do
-    (Map.get(metadata, "at") || Map.get(metadata, :at) || System.system_time(:millisecond))
-    |> normalize_int()
-  end
-
-  defp normalize_device(attrs) do
-    %{
-      id: Map.get(attrs, "id") || Map.get(attrs, :id),
-      name: Map.get(attrs, "name") || Map.get(attrs, :name) || "Unknown Device",
-      connected_at: System.system_time(:millisecond)
-    }
   end
 end

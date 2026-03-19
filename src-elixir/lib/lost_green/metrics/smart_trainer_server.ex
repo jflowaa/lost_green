@@ -81,7 +81,7 @@ defmodule LostGreen.Metrics.SmartTrainerServer do
   def handle_call({:connect_device, attrs}, _from, state) do
     state =
       state
-      |> Map.put(:connected_device, normalize_device(attrs))
+      |> Map.put(:connected_device, LostGreen.DataHelper.normalize_device(attrs))
       |> Map.put(:last_updated_at, System.system_time(:millisecond))
 
     {:reply, snapshot_from_state(state), state}
@@ -97,11 +97,11 @@ defmodule LostGreen.Metrics.SmartTrainerServer do
   end
 
   def handle_call({:record_reading, params}, _from, state) do
-    at = normalize_timestamp(params)
+    at = LostGreen.DataHelper.normalize_timestamp(params)
     watts = parse_number(Map.get(params, "watts"), nil)
 
     resistance_factor =
-      parse_number(Map.get(params, "resistance_factor") || Map.get(params, "resistance"), nil)
+      parse_number(Map.get(params, "resistance_factor"), nil)
 
     target_watts = parse_number(Map.get(params, "target_watts"), nil)
     fallback_speed = parse_number(Map.get(params, "speed_kph"), nil)
@@ -160,20 +160,20 @@ defmodule LostGreen.Metrics.SmartTrainerServer do
       |> Map.merge(%{
         gravity:
           parse_number(
-            Map.get(attrs, :gravity) || Map.get(attrs, "gravity"),
+            Map.get(attrs, :gravity),
             state.physics.gravity
           ),
         air_density:
           parse_number(
-            Map.get(attrs, :air_density) || Map.get(attrs, "air_density"),
+            Map.get(attrs, :air_density),
             state.physics.air_density
           ),
-        drag: parse_number(Map.get(attrs, :drag) || Map.get(attrs, "drag"), state.physics.drag),
+        drag: parse_number(Map.get(attrs, :drag), state.physics.drag),
         slope:
-          parse_number(Map.get(attrs, :slope) || Map.get(attrs, "slope"), state.physics.slope),
+          parse_number(Map.get(attrs, :slope), state.physics.slope),
         rolling_resistance:
           parse_number(
-            Map.get(attrs, :rolling_resistance) || Map.get(attrs, "rolling_resistance"),
+            Map.get(attrs, :rolling_resistance),
             state.physics.rolling_resistance
           )
       })
@@ -199,19 +199,6 @@ defmodule LostGreen.Metrics.SmartTrainerServer do
       connected_device: state.connected_device,
       last_updated_at: state.last_updated_at
     }
-  end
-
-  defp normalize_device(attrs) do
-    %{
-      id: Map.get(attrs, "id") || Map.get(attrs, :id),
-      name: Map.get(attrs, "name") || Map.get(attrs, :name) || "Unknown Device",
-      connected_at: System.system_time(:millisecond)
-    }
-  end
-
-  defp normalize_timestamp(params) do
-    parse_number(Map.get(params, "at") || Map.get(params, :at), System.system_time(:millisecond))
-    |> trunc()
   end
 
   defp parse_number(nil, default), do: default
