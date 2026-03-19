@@ -6,6 +6,7 @@ use super::bluetooth::{get_adapter, SCAN_DURATION_SECS};
 use btleplug::api::{Central, Peripheral as _, ScanFilter, WriteType};
 use btleplug::platform::Peripheral;
 use futures::stream::StreamExt;
+use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 use tauri::Emitter;
 use tauri::Manager;
@@ -23,6 +24,7 @@ const FTMS_INDOOR_BIKE_DATA: uuid::Uuid =
     uuid::uuid!("00002ad2-0000-1000-8000-00805f9b34fb");
 const FTMS_CONTROL_POINT: uuid::Uuid =
     uuid::uuid!("00002ad9-0000-1000-8000-00805f9b34fb");
+const UNKNOWN_DEVICE_NAME: &str = "Unnamed BLE Device";
 
 fn scan_task() -> &'static Mutex<Option<tauri::async_runtime::JoinHandle<()>>> {
     static SCAN_TASK: OnceLock<Mutex<Option<tauri::async_runtime::JoinHandle<()>>>> =
@@ -39,6 +41,11 @@ fn stream_task() -> &'static Mutex<Option<tauri::async_runtime::JoinHandle<()>>>
 fn connected_peripheral() -> &'static Mutex<Option<Peripheral>> {
     static PERIPHERAL: OnceLock<Mutex<Option<Peripheral>>> = OnceLock::new();
     PERIPHERAL.get_or_init(|| Mutex::new(None))
+}
+
+fn discovered_peripherals() -> &'static Mutex<HashMap<String, Peripheral>> {
+    static DISCOVERED: OnceLock<Mutex<HashMap<String, Peripheral>>> = OnceLock::new();
+    DISCOVERED.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
 fn cascade_state() -> &'static Mutex<CascadeState> {
@@ -65,7 +72,7 @@ pub fn trainer_power_source_device() -> Option<DevicePayload> {
     if guard.power_connected {
         guard.device.as_ref().map(|device| DevicePayload {
             id: device.id.clone(),
-            name: format!("{} (trainer power)", device.name),
+            name: device.name.clone(),
         })
     } else {
         None
@@ -78,7 +85,7 @@ pub fn trainer_cadence_source_device() -> Option<DevicePayload> {
     if guard.cadence_connected {
         guard.device.as_ref().map(|device| DevicePayload {
             id: device.id.clone(),
-            name: format!("{} (trainer cadence)", device.name),
+            name: device.name.clone(),
         })
     } else {
         None
@@ -362,14 +369,13 @@ pub fn smart_trainer_bridge_error(window: tauri::Window, message: String) -> Res
 async fn ble_scan() -> Result<Vec<DevicePayload>, String> {
     let adapter = get_adapter().await?;
 
+    {
+        let mut guard = discovered_peripherals().lock().unwrap_or_else(|p| p.into_inner());
+        guard.clear();
+    }
+
     adapter
-        .start_scan(ScanFilter {
-            services: vec![
-                FITNESS_MACHINE_SERVICE,
-                CYCLING_POWER_SERVICE,
-                CSC_SERVICE,
-            ],
-        })
+        .start_scan(ScanFilter::default())
         .await
         .map_err(|e| format!("Failed to start BLE scan: {e}"))?;
 
@@ -390,13 +396,19 @@ async fn ble_scan() -> Result<Vec<DevicePayload>, String> {
     for p in peripherals {
         if let Ok(Some(props)) = p.properties().await {
             let services = &props.services;
-            let looks_like_trainer = services.contains(&FITNESS_MACHINE_SERVICE)
-                || (services.contains(&CYCLING_POWER_SERVICE) && services.contains(&CSC_SERVICE));
+            let name = props
+                .local_name
+                .clone()
+                .unwrap_or_else(|| UNKNOWN_DEVICE_NAME.to_string());
+            let looks_like_trainer = has_trainer_services(services);
 
             if looks_like_trainer {
-                let name = props.local_name.unwrap_or_else(|| "Smart Trainer".to_string());
+                let id = p.id().to_string();
+                let mut guard = discovered_peripherals().lock().unwrap_or_else(|poison| poison.into_inner());
+                guard.insert(id.clone(), p.clone());
+
                 devices.push(DevicePayload {
-                    id: p.id().to_string(),
+                    id,
                     name,
                 });
             }
@@ -409,35 +421,15 @@ async fn ble_scan() -> Result<Vec<DevicePayload>, String> {
 async fn ble_connect(window: &tauri::Window, device_id: &str) -> Result<(), String> {
     use btleplug::api::Peripheral as _;
 
-    let adapter = get_adapter().await?;
-
-    adapter
-        .start_scan(ScanFilter {
-            services: vec![
-                FITNESS_MACHINE_SERVICE,
-                CYCLING_POWER_SERVICE,
-                CSC_SERVICE,
-            ],
-        })
-        .await
-        .map_err(|e| format!("Pre-connect scan error: {e}"))?;
-
-    tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
-
-    adapter
-        .stop_scan()
-        .await
-        .map_err(|e| format!("Pre-connect scan stop error: {e}"))?;
-
-    let peripherals = adapter
-        .peripherals()
-        .await
-        .map_err(|e| format!("Peripheral list error: {e}"))?;
-
-    let peripheral = peripherals
-        .into_iter()
-        .find(|p| p.id().to_string() == device_id)
-        .ok_or_else(|| format!("Device {device_id} not found. Try scanning again."))?;
+    let peripheral = {
+        let guard = discovered_peripherals().lock().unwrap_or_else(|p| p.into_inner());
+        guard.get(device_id).cloned()
+    }
+    .ok_or_else(|| {
+        format!(
+            "Device {device_id} is no longer in the latest scan results. Try refreshing first."
+        )
+    })?;
 
     peripheral
         .connect()
@@ -463,7 +455,9 @@ async fn ble_connect(window: &tauri::Window, device_id: &str) -> Result<(), Stri
     let supports_cadence = services.contains(&CSC_SERVICE) || has_ftms_bike_data;
     let supports_ftms_control = chars.iter().any(|c| c.uuid == FTMS_CONTROL_POINT);
 
-    let name = props.local_name.unwrap_or_else(|| "Smart Trainer".to_string());
+    let name = props
+        .local_name
+        .unwrap_or_else(|| UNKNOWN_DEVICE_NAME.to_string());
     let device = DevicePayload {
         id: device_id.to_string(),
         name,
@@ -630,6 +624,11 @@ fn parse_ftms_indoor_bike_data(data: &[u8]) -> FtmsParsed {
     }
 
     parsed
+}
+
+fn has_trainer_services(services: &[uuid::Uuid]) -> bool {
+    services.contains(&FITNESS_MACHINE_SERVICE)
+        || (services.contains(&CYCLING_POWER_SERVICE) && services.contains(&CSC_SERVICE))
 }
 
 fn connect_simulated(window: &tauri::Window, device_id: String) -> Result<(), String> {

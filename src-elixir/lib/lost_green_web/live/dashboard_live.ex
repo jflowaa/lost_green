@@ -70,6 +70,8 @@ defmodule LostGreenWeb.DashboardLive do
      |> assign(:modal_step, :pick_type)
      |> assign(:modal_device_type, nil)
      |> assign(:modal_available_devices, [])
+     |> assign(:modal_scanning?, false)
+     |> assign(:modal_connecting_device_id, nil)
      |> assign(:trainer_physics, trainer_physics)
      |> assign(:trainer_physics_form, trainer_physics_form(trainer_physics))
      |> assign(:trainer_resistance_factor_form, trainer_resistance_factor_form(trainer_physics))
@@ -84,11 +86,17 @@ defmodule LostGreenWeb.DashboardLive do
      |> assign(:device_modal_open?, true)
      |> assign(:modal_step, :pick_type)
      |> assign(:modal_device_type, nil)
-     |> assign(:modal_available_devices, [])}
+     |> assign(:modal_available_devices, [])
+     |> assign(:modal_scanning?, false)
+     |> assign(:modal_connecting_device_id, nil)}
   end
 
   def handle_event("close_device_modal", _params, socket) do
-    {:noreply, assign(socket, :device_modal_open?, false)}
+    {:noreply,
+     socket
+     |> assign(:device_modal_open?, false)
+     |> assign(:modal_scanning?, false)
+     |> assign(:modal_connecting_device_id, nil)}
   end
 
   def handle_event("pick_device_type", %{"device_type" => type}, socket) do
@@ -97,7 +105,9 @@ defmodule LostGreenWeb.DashboardLive do
      |> assign(:modal_step, :pick_device)
      |> assign(:modal_device_type, type)
      |> assign(:modal_available_devices, [])
-     |> push_event("request_device_list", %{device_type: type})}
+     |> assign(:modal_scanning?, true)
+     |> assign(:modal_connecting_device_id, nil)
+     |> push_event("device_bridge_invoke", %{action: "list", device_type: type})}
   end
 
   def handle_event("back_to_type_picker", _params, socket) do
@@ -105,7 +115,69 @@ defmodule LostGreenWeb.DashboardLive do
      socket
      |> assign(:modal_step, :pick_type)
      |> assign(:modal_device_type, nil)
-     |> assign(:modal_available_devices, [])}
+     |> assign(:modal_available_devices, [])
+     |> assign(:modal_scanning?, false)
+     |> assign(:modal_connecting_device_id, nil)}
+  end
+
+  def handle_event("request_connected_devices", _params, socket) do
+    {:reply, %{connected_devices: connected_devices_payload(socket.assigns.metrics.devices)},
+     socket}
+  end
+
+  def handle_event("change_profile", _params, socket) do
+    {:noreply, push_event(socket, "disconnect_all_devices", %{})}
+  end
+
+  def handle_event("profile_change_ready", _params, socket) do
+    {:noreply, redirect(socket, to: ~p"/logout")}
+  end
+
+  def handle_event("device_bridge_action", %{"action" => "list", "device_type" => type}, socket) do
+    if modal_busy?(socket.assigns) do
+      {:noreply, socket}
+    else
+      {:noreply,
+       socket
+       |> assign(:modal_step, :pick_device)
+       |> assign(:modal_device_type, type)
+       |> assign(:modal_scanning?, true)
+       |> assign(:modal_connecting_device_id, nil)
+       |> push_event("device_bridge_invoke", %{action: "list", device_type: type})}
+    end
+  end
+
+  def handle_event(
+        "device_bridge_action",
+        %{"action" => "connect", "device_type" => type, "device_id" => device_id},
+        socket
+      ) do
+    if modal_busy?(socket.assigns) do
+      {:noreply, socket}
+    else
+      {:noreply,
+       socket
+       |> assign(:modal_scanning?, false)
+       |> assign(:modal_connecting_device_id, device_id)
+       |> push_event("device_bridge_invoke", %{
+         action: "connect",
+         device_type: type,
+         device_id: device_id
+       })}
+    end
+  end
+
+  def handle_event(
+        "device_bridge_action",
+        %{"action" => "disconnect", "device_type" => type, "device_id" => device_id},
+        socket
+      ) do
+    {:noreply,
+     push_event(socket, "device_bridge_invoke", %{
+       action: "disconnect",
+       device_type: type,
+       device_id: device_id
+     })}
   end
 
   # ── Device events from the JS DeviceBridge hook ──────────────────────────────
@@ -116,6 +188,8 @@ defmodule LostGreenWeb.DashboardLive do
      |> assign(:modal_available_devices, normalize_devices(devices))
      |> assign(:modal_step, :pick_device)
      |> assign(:modal_device_type, type)
+     |> assign(:modal_scanning?, false)
+     |> assign(:modal_connecting_device_id, nil)
      |> assign(:device_modal_open?, true)}
   end
 
@@ -130,6 +204,8 @@ defmodule LostGreenWeb.DashboardLive do
         {:noreply,
          socket
          |> assign(:device_modal_open?, false)
+         |> assign(:modal_scanning?, false)
+         |> assign(:modal_connecting_device_id, nil)
          |> assign(:metrics, snapshot)}
     end
   end
@@ -168,7 +244,11 @@ defmodule LostGreenWeb.DashboardLive do
   end
 
   def handle_event("device_error", %{"message" => message}, socket) do
-    {:noreply, put_flash(socket, :error, message)}
+    {:noreply,
+     socket
+     |> assign(:modal_scanning?, false)
+     |> assign(:modal_connecting_device_id, nil)
+     |> put_flash(:error, message)}
   end
 
   def handle_event("update_trainer_physics", %{"trainer_physics" => params}, socket) do
@@ -220,7 +300,6 @@ defmodule LostGreenWeb.DashboardLive do
       <div
         id="device-bridge"
         phx-hook="DeviceBridge"
-        data-connected-devices={connected_devices_json(@metrics.devices)}
         class="space-y-8"
       >
         <DashboardComponents.dashboard_header current_user={@current_user} />
@@ -251,6 +330,8 @@ defmodule LostGreenWeb.DashboardLive do
           device_defs={@device_defs}
           modal_device_type={@modal_device_type}
           modal_available_devices={@modal_available_devices}
+          modal_scanning?={@modal_scanning?}
+          modal_connecting_device_id={@modal_connecting_device_id}
         />
       </div>
     </Layouts.app>
@@ -369,9 +450,8 @@ defmodule LostGreenWeb.DashboardLive do
     end
   end
 
-  defp connected_devices_json(devices) do
-    devices
-    |> Enum.reduce(%{}, fn {device_type, device}, acc ->
+  defp connected_devices_payload(devices) do
+    Enum.reduce(devices, %{}, fn {device_type, device}, acc ->
       case device do
         %{id: id, name: name} when is_binary(id) and id != "" ->
           Map.put(acc, device_type_key(device_type), %{id: id, name: name})
@@ -380,7 +460,6 @@ defmodule LostGreenWeb.DashboardLive do
           acc
       end
     end)
-    |> Jason.encode!()
   end
 
   defp device_type_key(:heart_rate_monitor), do: "heart_rate"
@@ -388,6 +467,10 @@ defmodule LostGreenWeb.DashboardLive do
   defp device_type_key(:cadence_sensor), do: "cadence"
   defp device_type_key(:smart_trainer), do: "smart_trainer"
   defp device_type_key(:secondary_power_meter), do: "secondary_power_meter"
+
+  defp modal_busy?(assigns) do
+    assigns.modal_scanning? or is_binary(assigns.modal_connecting_device_id)
+  end
 
   defp heart_rate_chart_points([]), do: []
 

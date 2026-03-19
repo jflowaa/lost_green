@@ -1,7 +1,7 @@
 defmodule LostGreenWeb.DashboardComponents do
   use LostGreenWeb, :html
 
-  attr :current_user, :map, required: true
+  attr(:current_user, :map, required: true)
 
   def dashboard_header(assigns) do
     ~H"""
@@ -21,25 +21,21 @@ defmodule LostGreenWeb.DashboardComponents do
         <.link href={~p"/profile/edit"} class="btn btn-ghost btn-sm rounded-lg">
           Edit Profile
         </.link>
-        <.form
-          for={%{}}
-          action={~p"/logout"}
-          method="delete"
-          id="change-profile-form"
-          data-device-logout
+        <button
+          type="button"
+          phx-click="change_profile"
+          class="btn btn-ghost btn-sm rounded-lg"
         >
-          <button type="submit" class="btn btn-ghost btn-sm rounded-lg">
-            Change Profile
-          </button>
-        </.form>
+          Change Profile
+        </button>
       </div>
     </section>
     """
   end
 
-  attr :metrics, :map, required: true
-  attr :trainer_physics_form, :map, required: true
-  attr :trainer_resistance_factor_form, :map, required: true
+  attr(:metrics, :map, required: true)
+  attr(:trainer_physics_form, :map, required: true)
+  attr(:trainer_resistance_factor_form, :map, required: true)
 
   def trainer_physics_section(assigns) do
     ~H"""
@@ -128,9 +124,9 @@ defmodule LostGreenWeb.DashboardComponents do
     """
   end
 
-  attr :device_defs, :list, required: true
-  attr :metrics, :map, required: true
-  attr :current_user, :map, required: true
+  attr(:device_defs, :list, required: true)
+  attr(:metrics, :map, required: true)
+  attr(:current_user, :map, required: true)
 
   def devices_section(assigns) do
     ~H"""
@@ -162,10 +158,10 @@ defmodule LostGreenWeb.DashboardComponents do
     """
   end
 
-  attr :metrics, :map, required: true
-  attr :chart_points, :list, required: true
-  attr :chart_width, :integer, required: true
-  attr :chart_height, :integer, required: true
+  attr(:metrics, :map, required: true)
+  attr(:chart_points, :list, required: true)
+  attr(:chart_width, :integer, required: true)
+  attr(:chart_height, :integer, required: true)
 
   def heart_rate_panel(assigns) do
     ~H"""
@@ -275,15 +271,18 @@ defmodule LostGreenWeb.DashboardComponents do
     """
   end
 
-  attr :modal_step, :atom, required: true
-  attr :device_defs, :list, required: true
-  attr :modal_device_type, :string, default: nil
-  attr :modal_available_devices, :list, required: true
+  attr(:modal_step, :atom, required: true)
+  attr(:device_defs, :list, required: true)
+  attr(:modal_device_type, :string, default: nil)
+  attr(:modal_available_devices, :list, required: true)
+  attr(:modal_scanning?, :boolean, required: true)
+  attr(:modal_connecting_device_id, :string, default: nil)
 
   def device_modal(assigns) do
     ~H"""
     <div
       id="device-modal-overlay"
+      aria-busy={modal_busy?(@modal_scanning?, @modal_connecting_device_id)}
       class="fixed inset-0 z-30 flex items-center justify-center bg-base-content/30 p-4 backdrop-blur-sm"
     >
       <div class="w-full max-w-lg rounded-3xl border border-base-300 bg-base-100 p-6 shadow-2xl">
@@ -308,6 +307,7 @@ defmodule LostGreenWeb.DashboardComponents do
             type="button"
             phx-click="close_device_modal"
             class="btn btn-ghost btn-sm rounded-xl"
+            disabled={modal_busy?(@modal_scanning?, @modal_connecting_device_id)}
           >
             Close
           </button>
@@ -337,24 +337,32 @@ defmodule LostGreenWeb.DashboardComponents do
                 type="button"
                 phx-click="back_to_type_picker"
                 class="btn btn-ghost btn-sm rounded-xl"
+                disabled={modal_busy?(@modal_scanning?, @modal_connecting_device_id)}
               >
                 ← Back
               </button>
               <button
                 id="modal-refresh-button"
                 type="button"
-                data-tauri-action="list"
-                data-device-type={@modal_device_type}
+                phx-click="device_bridge_action"
+                phx-value-action="list"
+                phx-value-device_type={@modal_device_type}
                 class="btn btn-primary btn-sm rounded-xl"
+                disabled={modal_busy?(@modal_scanning?, @modal_connecting_device_id)}
               >
-                Refresh
+                {if @modal_scanning?, do: "Refreshing...", else: "Refresh"}
               </button>
             </div>
 
             <div id="modal-device-list" class="space-y-3">
               <%= if @modal_available_devices == [] do %>
-                <div class="rounded-2xl border border-dashed border-base-300 bg-base-200/50 px-4 py-8 text-center text-sm text-base-content/60">
-                  No devices found. Click Refresh to scan.
+                <div
+                  id="modal-device-empty-state"
+                  class="rounded-2xl border border-dashed border-base-300 bg-base-200/50 px-4 py-8 text-center text-sm text-base-content/60"
+                >
+                  {if @modal_scanning?,
+                    do: "Scanning...",
+                    else: "No devices found. Click Refresh to scan."}
                 </div>
               <% else %>
                 <div
@@ -370,12 +378,16 @@ defmodule LostGreenWeb.DashboardComponents do
                   </div>
                   <button
                     type="button"
-                    data-tauri-action="connect"
-                    data-device-type={@modal_device_type}
-                    data-device-id={device.id}
+                    phx-click="device_bridge_action"
+                    phx-value-action="connect"
+                    phx-value-device_type={@modal_device_type}
+                    phx-value-device_id={device.id}
                     class="btn btn-outline btn-sm rounded-xl"
+                    disabled={modal_busy?(@modal_scanning?, @modal_connecting_device_id)}
                   >
-                    Connect
+                    {if @modal_connecting_device_id == device.id,
+                      do: "Connecting...",
+                      else: "Connect"}
                   </button>
                 </div>
               <% end %>
@@ -386,11 +398,11 @@ defmodule LostGreenWeb.DashboardComponents do
     """
   end
 
-  attr :device_def, :map, required: true
-  attr :current_user, :map, required: true
-  attr :connected, :map, default: nil
-  attr :smart_trainer, :map, default: nil
-  attr :reading, :any, default: nil
+  attr(:device_def, :map, required: true)
+  attr(:current_user, :map, required: true)
+  attr(:connected, :map, default: nil)
+  attr(:smart_trainer, :map, default: nil)
+  attr(:reading, :any, default: nil)
 
   def device_tray_tile(assigns) do
     ~H"""
@@ -440,9 +452,10 @@ defmodule LostGreenWeb.DashboardComponents do
           <button
             id={"device-disconnect-#{@device_def.key}"}
             type="button"
-            data-tauri-action="disconnect"
-            data-device-type={@device_def.key}
-            data-device-id={@connected.id}
+            phx-click="device_bridge_action"
+            phx-value-action="disconnect"
+            phx-value-device_type={@device_def.key}
+            phx-value-device_id={@connected.id}
             class="btn btn-ghost btn-xs w-full rounded-lg"
           >
             <.icon name="hero-x-mark" class="size-3" /> Disconnect
@@ -505,5 +518,9 @@ defmodule LostGreenWeb.DashboardComponents do
 
   defp chart_polyline(points) do
     Enum.map_join(points, " ", fn point -> "#{point.x},#{point.y}" end)
+  end
+
+  defp modal_busy?(modal_scanning?, modal_connecting_device_id) do
+    modal_scanning? or is_binary(modal_connecting_device_id)
   end
 end

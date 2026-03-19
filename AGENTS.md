@@ -1,3 +1,81 @@
+# Lost Green Agent Guide
+
+This document is the working contract for AI/code agents in this repository.
+
+## Repository context
+
+Lost Green is an indoor bike trainer desktop application for:
+
+- connecting fitness devices (smart trainers, power meters, cadence sensors, and heart-rate monitors)
+- running structured workouts (including ERG control targets)
+- collecting ride data in real time for post-workout analysis
+
+Architecture split:
+
+- `src-elixir`: Phoenix app (UI + backend logic + persistence)
+- `src-tauri`: desktop host and machine bridge (Bluetooth/WiFi access, Phoenix sidecar lifecycle)
+
+## Agent operating rules (repo-wide)
+
+- Scope changes to the smallest safe surface area.
+- Prefer root-cause fixes over cosmetic patches.
+- Do not remove or weaken any rule in this file unless explicitly requested.
+- When working in `src-elixir`, follow Phoenix/LiveView/HEEx rules below exactly.
+- When working in `src-tauri`, preserve sidecar assumptions and machine-gateway intent.
+
+## Local development quick reference
+
+From repo root:
+
+```bash
+mise trust
+mise install
+cargo install tauri-cli
+```
+
+From `src-elixir`:
+
+```bash
+mix setup
+mix phx.server
+```
+
+From `src-tauri`:
+
+```bash
+SIMULATE_DEVICES=1 cargo tauri dev
+```
+
+Notes:
+
+- `SIMULATE_DEVICES` accepts `1`, `true`, `yes`, or `on`.
+- In debug, Tauri checks `http://localhost:4000` first and uses that backend if available.
+- If Phoenix is not running, Tauri may attempt sidecar startup.
+
+## Release quick reference (macOS)
+
+Run from repo root:
+
+```bash
+./scripts/release.sh
+```
+
+Optional:
+
+```bash
+./scripts/release.sh --target x86_64-apple-darwin
+./scripts/release.sh --skip-tauri-build
+```
+
+What release script handles:
+
+1. Builds Phoenix production assets/code.
+2. Builds Burrito backend release (`lost_green_desktop`).
+3. Copies Burrito output to Tauri sidecar path (`src-tauri/lost_green_backend-<target>`).
+4. Runs Tauri build (unless skipped).
+
+Current release support is macOS (`aarch64-apple-darwin` default, optional `x86_64-apple-darwin`).
+
 # Follow the below when working inside `src-elixir`
 
 This is a web application written using the Phoenix web framework.
@@ -452,4 +530,26 @@ And **never** do this:
 
 # Follow the below when working inside `src-tauri`
 
-This is a Tauri application that uses an Elixir Phoenix application as a sidecar. The goal of this application is to be a gateway to the user's machine. Such as to Bluetooth or WiFi.
+This is a Tauri application that uses an Elixir Phoenix application as a sidecar. The goal of this application is to be a gateway to the user's machine (for example Bluetooth or WiFi access).
+
+## Tauri-sidecar guidelines
+
+- Treat the Phoenix backend sidecar (`lost_green_backend-*`) as a required runtime dependency in production flows.
+- Do not break the debug behavior where Tauri prefers an externally running backend at `http://localhost:4000`.
+- Keep sidecar naming/path conventions stable unless the whole release pipeline is updated together.
+- Preserve capability/security intent in `src-tauri/capabilities/default.json` and related Tauri config.
+- Avoid introducing machine-access features without explicit capability and security review.
+
+## Tauri development commands
+
+From `src-tauri`:
+
+```bash
+SIMULATE_DEVICES=1 cargo tauri dev
+```
+
+Troubleshooting reminders:
+
+- If sidecar is missing, run `./scripts/release.sh --skip-tauri-build` from repo root.
+- If app opens blank, verify Phoenix is reachable at `http://localhost:4000` and port `4000` is free.
+- If no hardware appears in development, run with `SIMULATE_DEVICES=1` (or `true`/`yes`/`on`).

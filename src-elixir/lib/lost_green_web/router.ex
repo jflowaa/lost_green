@@ -24,6 +24,7 @@ defmodule LostGreenWeb.Router do
     post "/users/select", PageController, :select_user
 
     get "/favicon.ico", PageController, :favicon
+    get "/logout", PageController, :logout
     delete "/logout", PageController, :logout
 
     # Profile editing — requires an active session (checked in controller)
